@@ -23,14 +23,16 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 #include <array>
+#include <cmath>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb-master/stb_image.h>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
-
 const int MAX_FRAMES_IN_FLIGHT = 2;
+const uint32_t MESH_SIDE_LENGTH = 1000;
+const float MESH_SCALE = 0.5;
 
 const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -39,7 +41,13 @@ struct Vertex
 {
 	glm::vec3 pos;
 	glm::vec3 color;
-	glm::vec2 texCoord;
+	//glm::vec2 texCoord;
+
+	Vertex(glm::vec3 initialPos, glm::vec3 initialColor)
+	{
+		pos = initialPos;
+		color = initialColor;
+	}
 
 	static VkVertexInputBindingDescription getBindingDescription()
 	{
@@ -76,31 +84,50 @@ struct Vertex
 	}
 };
 
-const std::vector<Vertex> vertices =
+std::vector<Vertex> vertices =
 {
+	/*
 	//Pos					//Color				//texCoord
 	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}}, //{0.0f, 0.0f}},
 	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}}, //{1.0f, 0.0f}},
 	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}}, //{1.0f, 1.0f}},
 	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}}, //{0.0f, 1.0f}},
-
-	{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, //{0.0f, 0.0f}},
-	{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}}, //{1.0f, 0.0f}},
-	{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}}, //{1.0f, 1.0f}},
-	{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}}//, {0.0f, 1.0f}}
+	*/
 };
 
-const std::vector<uint16_t> indices =
+std::vector<uint32_t> indices =
 {
+	/*
 	0, 1, 2, 2, 3, 0,
 	4, 5, 6, 6, 7, 4
+	*/
 };
 
 struct UniformBufferObject
 {
-	alignas(16) glm::mat4 model;
-	alignas(16) glm::mat4 view;
-	alignas(16) glm::mat4 proj;
+	alignas(16) glm::mat4 _Model = glm::mat4(1);
+	alignas(16) glm::mat4 _View = glm::mat4(1);
+	alignas(16) glm::mat4 _Proj = glm::mat4(1);
+	alignas(16) glm::vec4 _LightDirection = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+	alignas(4) glm::vec1 _GradientRotation = glm::vec1(68.645); //-180 to 180
+	alignas(4)glm::vec1 _NoiseRotation = glm::vec1(30.0f); //-180 to 180
+	alignas(4) glm::vec1 _TerrainHeight = glm::vec1(50.0f);
+	alignas(8) glm::vec2 _AngularVariance = glm::vec2(-15, 15);
+	alignas(4) glm::vec1 _Scale = glm::vec1(50.0f);
+	alignas(4)glm::vec1 _Octaves = glm::vec1(12); //1 to 32
+	alignas(4) glm::vec1 _AmplitudeDecay = glm::vec1(0.45f); //.01 to 1
+	alignas(4)glm::vec1 _NormalStrength = glm::vec1(0.0f);
+	alignas(16) glm::vec4 _Offset = glm::vec4(0); //Horizontal scroll through the noise
+	alignas(4) glm::vec1 _Seed = glm::vec1(0.0f);
+	alignas(4)glm::vec1 _InitialAmplitude = glm::vec1(0.5); //0.01 to 2.0
+	alignas(4) glm::vec1 _Lacunarity = glm::vec1(2.0f); //.01 to 3
+	alignas(8) glm::vec2 _SlopeRange = glm::vec2(0.9, 0.98);
+	alignas(16) glm::vec4 _LowSlopeColor = glm::vec4(.3686274509803922, .3725490196078431, .0784313725490196, 1);
+	alignas(16) glm::vec4 _HighSlopeColor = glm::vec4(.1019607843137255, .0588235294117647, .0470588235294118, 1);
+	alignas(4) glm::vec1 _FrequencyVarianceLowerBound = glm::vec1(-0.085);
+	alignas(4) glm::vec1 _FrequencyVarianceUpperBound = glm::vec1(.115);
+	alignas(4) glm::vec1 _SlopeDamping = glm::vec1(0.155f);
+	alignas(16) glm::vec4 _AmbientLight = glm::vec4(.192156862745098, .2705882352941176, .3019607843137255, 1);
 };
 
 //Disable validation layers when not in debug build
@@ -150,6 +177,8 @@ public:
 	}
 
 private:
+	glm::vec3 camPos = glm::vec3(0.0f, 100.0f, 100.0f);
+
 	GLFWwindow* window;
 	VkInstance instance;
 	VkDebugUtilsMessengerEXT debugMessenger;
@@ -195,6 +224,11 @@ private:
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;
 
+	glm::vec2 previousMousePos = glm::vec2(0);
+	glm::vec2 mouseDelta = glm::vec2(0);
+
+	UniformBufferObject ubo{};
+
 	bool framebufferResized = false;
 
 	void initWindow()
@@ -209,6 +243,20 @@ private:
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+		/*
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		if (glfwRawMouseMotionSupported())
+		{
+			glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+		}
+		else
+		{
+			throw std::runtime_error("Raw mouse motion now supported");
+		}
+		*/
+		glfwSetCursorPosCallback(window, cursorPositionCallback);
+		glfwSetScrollCallback(window, scrollCallback);
 	}
 
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -217,8 +265,30 @@ private:
 		app->framebufferResized = true;
 	}
 
+	static void cursorPositionCallback(GLFWwindow* window, double xPos, double yPos)
+	{
+		/*
+		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		app->mouseDelta = glm::vec2(xPos, yPos) - app->previousMousePos;
+		app->previousMousePos = glm::vec2(xPos, yPos);
+
+		app->ubo._View = glm::rotate(app->ubo._View, glm::radians(1.0f), glm::vec3(app->mouseDelta.y, app->mouseDelta.x, 0.0f));
+		//std::cout << "X: " << app->ubo.view[0][0] << "\tY: " << app->mouseDelta.y << std::endl;
+		*/
+	}
+
+	static void scrollCallback(GLFWwindow* window, double xOffset, double yOffset)
+	{
+		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		app->camPos -= glm::vec3(0.0f, yOffset, yOffset);
+		app->ubo._View = glm::lookAt(app->camPos, app->camPos + glm::vec3(0.0f, -0.5f, -1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		std::cout << yOffset;
+	}
+
 	void initVulkan()
 	{
+		generateVertices();
+		generateIndices();
 		createInstance();
 		setupDebugMessenger();
 		createSurface();
@@ -248,6 +318,7 @@ private:
 	{
 		while (!glfwWindowShouldClose(window))
 		{
+			//Console.ReadLine();
 			glfwPollEvents();
 			drawFrame();
 		}
@@ -274,14 +345,7 @@ private:
 		}
 
 		//Uniforms
-		//updateUniformBuffer(currentFrame);
-		UniformBufferObject ubo{};
-		ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
-		ubo.proj[1][1] *= -1;
-
-		memcpy(uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+		updateUniformBuffer(currentFrame);
 
 		//Only reset fence if submitting work
 		vkResetFences(device, 1, &inFlightFences[currentFrame]);
@@ -837,7 +901,8 @@ private:
 		uboLayoutBinding.binding = 0;
 		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uboLayoutBinding.descriptorCount = 1;
-		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		//uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL;
 		uboLayoutBinding.pImmutableSamplers = nullptr;
 
 		/*
@@ -924,7 +989,7 @@ private:
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizer.lineWidth = 1.0f;
 		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 		rasterizer.depthBiasEnable = VK_FALSE;
 		rasterizer.depthBiasConstantFactor = 0.0f;
 		rasterizer.depthBiasClamp = 0.0f;
@@ -1189,9 +1254,9 @@ private:
 			{
 				return format;
 			}
-
-			throw std::runtime_error("failed to find supported format");
 		}
+
+		throw std::runtime_error("failed to find supported format");
 	}
 
 	VkFormat findDepthFormat()
@@ -1388,6 +1453,8 @@ private:
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
 			vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
 		}
+
+		ubo._View = glm::lookAt(camPos, camPos + glm::vec3(0.0f, -0.5f, -1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	}
 
 	void updateUniformBuffer(uint32_t currentImage)
@@ -1396,11 +1463,13 @@ private:
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-		UniformBufferObject ubo{};
-		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
-		ubo.proj[1][1] *= -1;
+		//camPos += glm::vec3(0.0f, 0.0f, time * 0.005f);
+
+		ubo._Model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		//ubo._Model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+		ubo._Proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 1000.0f);
+		//ubo._Proj[1][1] *= -1;
 
 		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 	}
@@ -1555,7 +1624,7 @@ private:
 		VkBuffer vertexBuffers[] = { vertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 		//vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
@@ -1768,6 +1837,59 @@ private:
 		vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 		endSingleTimeCommands(commandBuffer);
+	}
+
+	void generateVertices()
+	{
+		auto midpoint = (MESH_SIDE_LENGTH - 1) / 2.0;
+		glm::vec2 xzPos = glm::vec2(0);
+		glm::vec3 pos = glm::vec3(0);
+		glm::vec4 color = glm::vec4(1);
+
+		int counter = 0;
+
+		for (int i = 0; i < MESH_SIDE_LENGTH; i++)
+		{
+			for (int j = 0; j < MESH_SIDE_LENGTH; j++)
+			{
+				xzPos = glm::vec2(i - midpoint, j - midpoint);
+				//Vertex newVert = Vertex(glm::vec3(xzPos.x, 0, xzPos.y), glm::vec3(1.0f, 1.0f, 1.0f));
+				vertices.emplace_back(glm::vec3(xzPos.x * MESH_SCALE, 0.0f, xzPos.y * MESH_SCALE), glm::vec3(xzPos.x / MESH_SIDE_LENGTH, xzPos.y / MESH_SIDE_LENGTH, 0.0f));
+
+				counter++;
+			}
+		}
+
+		std::cout << "NUM VERTICES: " << counter << std::endl;
+	}
+
+	void generateIndices()
+	{
+		for (int i = 0; i < MESH_SIDE_LENGTH - 1; i++)
+		{
+			for (int j = 0; j < MESH_SIDE_LENGTH - 1; j++)
+			{
+				uint32_t v = (i * MESH_SIDE_LENGTH) + j;
+				uint32_t v0 = v;
+				uint32_t v1 = v + 1;
+				uint32_t v2 = v + MESH_SIDE_LENGTH;
+				uint32_t v3 = v + MESH_SIDE_LENGTH + 1;
+
+				indices.insert(indices.end(), { v0, v1, v2, v1, v3, v2 });
+
+				//std::cout << "v0: " << v0 << "\tv1: " << v1 << std::endl;
+				//std::cout << "v2: " << v2 << "\tv3: " << v3 << std::endl;
+			}
+		}
+
+		std::cout << indices.size() << std::endl;
+
+		/*
+		for (int i = 0; i < indices.size(); i++)
+		{
+			std::cout << indices[i] << "\n";
+		}
+		*/
 	}
 };
 
