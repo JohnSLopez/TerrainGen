@@ -28,11 +28,17 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb-master/stb_image.h>
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+#include <glm/gtc/type_ptr.hpp>
+
+const uint32_t WIDTH = 1920;
+const uint32_t HEIGHT = 1080;
 const int MAX_FRAMES_IN_FLIGHT = 2;
 const uint32_t MESH_SIDE_LENGTH = 1000;
-const float MESH_SCALE = 0.5;
+const float MESH_SCALE = 0.25;
+const float SCROLL_SPEED = 2.0;
 
 const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -121,13 +127,13 @@ struct UniformBufferObject
 	alignas(4) glm::vec1 _Seed = glm::vec1(0.0f);
 	alignas(4)glm::vec1 _InitialAmplitude = glm::vec1(0.5); //0.01 to 2.0
 	alignas(4) glm::vec1 _Lacunarity = glm::vec1(2.0f); //.01 to 3
-	alignas(8) glm::vec2 _SlopeRange = glm::vec2(0.9, 0.98);
+	alignas(8) glm::vec2 _SlopeRange = glm::vec2(0.84, 0.98);
 	alignas(16) glm::vec4 _LowSlopeColor = glm::vec4(.3686274509803922, .3725490196078431, .0784313725490196, 1);
 	alignas(16) glm::vec4 _HighSlopeColor = glm::vec4(.1019607843137255, .0588235294117647, .0470588235294118, 1);
 	alignas(4) glm::vec1 _FrequencyVarianceLowerBound = glm::vec1(-0.085);
 	alignas(4) glm::vec1 _FrequencyVarianceUpperBound = glm::vec1(.115);
 	alignas(4) glm::vec1 _SlopeDamping = glm::vec1(0.155f);
-	alignas(16) glm::vec4 _AmbientLight = glm::vec4(.192156862745098, .2705882352941176, .3019607843137255, 1);
+	alignas(16) glm::vec4 _AmbientLight = glm::vec4(1, 1, 1, 1);
 };
 
 //Disable validation layers when not in debug build
@@ -172,6 +178,7 @@ public:
 	{
 		initWindow();
 		initVulkan();
+		initImgui();
 		mainLoop();
 		cleanup();
 	}
@@ -226,6 +233,7 @@ private:
 
 	glm::vec2 previousMousePos = glm::vec2(0);
 	glm::vec2 mouseDelta = glm::vec2(0);
+	float modelRotationSpeed = 10.0f;
 
 	UniformBufferObject ubo{};
 
@@ -280,9 +288,8 @@ private:
 	static void scrollCallback(GLFWwindow* window, double xOffset, double yOffset)
 	{
 		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
-		app->camPos -= glm::vec3(0.0f, yOffset, yOffset);
+		app->camPos -= glm::vec3(0.0f, yOffset * SCROLL_SPEED, yOffset * SCROLL_SPEED);
 		app->ubo._View = glm::lookAt(app->camPos, app->camPos + glm::vec3(0.0f, -0.5f, -1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		std::cout << yOffset;
 	}
 
 	void initVulkan()
@@ -350,7 +357,6 @@ private:
 		//Only reset fence if submitting work
 		vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-		//Record command buffer
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
@@ -403,6 +409,9 @@ private:
 
 	void cleanup()
 	{
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
 		cleanupSwapChain();
 		vkDestroySampler(device, textureSampler, nullptr);
 		vkDestroyImageView(device, textureImageView, nullptr);
@@ -1465,7 +1474,7 @@ private:
 
 		//camPos += glm::vec3(0.0f, 0.0f, time * 0.005f);
 
-		ubo._Model = glm::rotate(glm::mat4(1.0f), time * glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		ubo._Model = glm::rotate(glm::mat4(1.0f), time * glm::radians(modelRotationSpeed), glm::vec3(0.0f, 1.0f, 0.0f));
 		//ubo._Model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
 		ubo._Proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 1000.0f);
@@ -1480,13 +1489,14 @@ private:
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
 		{
@@ -1581,7 +1591,7 @@ private:
 	{
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = 0;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 		beginInfo.pInheritanceInfo = nullptr;
 
 		if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
@@ -1630,6 +1640,19 @@ private:
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
+		//ImGui
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		createUI();
+
+		ImGui::Render();
+
+		ImDrawData* drawData = ImGui::GetDrawData();
+		ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
+
+		//End of render pass
 		vkCmdEndRenderPass(commandBuffer);
 
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -1859,8 +1882,6 @@ private:
 				counter++;
 			}
 		}
-
-		std::cout << "NUM VERTICES: " << counter << std::endl;
 	}
 
 	void generateIndices()
@@ -1881,15 +1902,76 @@ private:
 				//std::cout << "v2: " << v2 << "\tv3: " << v3 << std::endl;
 			}
 		}
-
-		std::cout << indices.size() << std::endl;
-
 		/*
 		for (int i = 0; i < indices.size(); i++)
 		{
 			std::cout << indices[i] << "\n";
 		}
 		*/
+	}
+
+	void initImgui()
+	{
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO& io = ImGui::GetIO(); (void)io;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+		ImGui::StyleColorsDark();
+
+		ImGui_ImplGlfw_InitForVulkan(window, true);
+		ImGui_ImplVulkan_InitInfo initInfo = {};
+		initInfo.Instance = instance;
+		initInfo.PhysicalDevice = physicalDevice;
+		initInfo.Device = device;
+		initInfo.QueueFamily = ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
+		initInfo.Queue = graphicsQueue;
+		//initInfo.PipelineCache
+		initInfo.DescriptorPool = descriptorPool;
+		initInfo.RenderPass = renderPass;
+		initInfo.Subpass = 0;
+		initInfo.MinImageCount = MAX_FRAMES_IN_FLIGHT;
+		initInfo.ImageCount = MAX_FRAMES_IN_FLIGHT;
+		//initInfo.MSAASamples
+		//initInfo.Allocator
+		//initInfo.CheckVkResultFn
+		ImGui_ImplVulkan_Init(&initInfo);
+	}
+
+	void createUI()
+	{
+		bool terrainGenUIActive = true;
+		ImGui::Begin("Options", &terrainGenUIActive, ImGuiWindowFlags_MenuBar);
+		//glm::vec4 color = glm::vec4(0);
+		if (ImGui::CollapsingHeader("Material Settings"))
+		{
+			ImGui::ColorEdit4("Ambient Light", glm::value_ptr(ubo._AmbientLight));
+			ImGui::ColorEdit4("High Slope Color", glm::value_ptr(ubo._HighSlopeColor));
+			ImGui::ColorEdit4("Low Slope Color", glm::value_ptr(ubo._LowSlopeColor));
+
+			float dampingMin = 0;
+			float dampingMax = 1;
+			ImGui::DragScalar("Slope Damping", ImGuiDataType_Float, &ubo._SlopeDamping, 0.05f, &dampingMin, &dampingMax);
+			ImGui::DragFloat2("Slope Threshold", glm::value_ptr(ubo._SlopeRange), 0.05f, 0.0f, 1.0f);
+		}
+
+		if (ImGui::CollapsingHeader("Mesh Settings"))
+		{
+			float offsetMin = -180.0f;
+			float offsetMax = 180.0f;
+			ImGui::DragScalar("Offset", ImGuiDataType_Float, &ubo._Offset.x, 1.0f, &offsetMin, &offsetMax);
+
+			float rotationMin = 0.0f;
+			float rotationMax = 90.0f;
+			ImGui::DragScalar("Rotation Speed", ImGuiDataType_Float, &modelRotationSpeed, 1.0f, &rotationMin, &rotationMax);
+
+			float gradientRotationMin = -180.0f;
+			float gradientRotationMax = 180.0f;
+			ImGui::DragScalar("Gradient Rotation", ImGuiDataType_Float, &ubo._GradientRotation, 0.1f, &gradientRotationMin, &gradientRotationMax, (const char*)0, ImGuiSliderFlags_WrapAround);
+		}
+		
+		ImGui::End();
 	}
 };
 
