@@ -36,8 +36,8 @@
 const uint32_t WIDTH = 1920;
 const uint32_t HEIGHT = 1080;
 const int MAX_FRAMES_IN_FLIGHT = 2;
-const uint32_t MESH_SIDE_LENGTH = 1000;
-const float MESH_SCALE = 0.25;
+const uint32_t MESH_SIDE_LENGTH = 500;
+const float MESH_SCALE = 0.5;
 const float SCROLL_SPEED = 2.0;
 
 const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
@@ -90,45 +90,30 @@ struct Vertex
 	}
 };
 
-std::vector<Vertex> vertices =
-{
-	/*
-	//Pos					//Color				//texCoord
-	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}}, //{0.0f, 0.0f}},
-	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}}, //{1.0f, 0.0f}},
-	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}}, //{1.0f, 1.0f}},
-	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}}, //{0.0f, 1.0f}},
-	*/
-};
+std::vector<Vertex> vertices = {};
 
-std::vector<uint32_t> indices =
-{
-	/*
-	0, 1, 2, 2, 3, 0,
-	4, 5, 6, 6, 7, 4
-	*/
-};
+std::vector<uint32_t> indices = {};
 
 struct UniformBufferObject
 {
 	alignas(16) glm::mat4 _Model = glm::mat4(1);
 	alignas(16) glm::mat4 _View = glm::mat4(1);
 	alignas(16) glm::mat4 _Proj = glm::mat4(1);
-	alignas(16) glm::vec4 _LightDirection = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+	alignas(16) glm::vec4 _LightDirection = glm::vec4(1.0f, -2.0f, 0.0f, 0.0f);
 	alignas(4) glm::vec1 _GradientRotation = glm::vec1(68.645); //-180 to 180
 	alignas(4)glm::vec1 _NoiseRotation = glm::vec1(30.0f); //-180 to 180
 	alignas(4) glm::vec1 _TerrainHeight = glm::vec1(50.0f);
 	alignas(8) glm::vec2 _AngularVariance = glm::vec2(-15, 15);
 	alignas(4) glm::vec1 _Scale = glm::vec1(50.0f);
 	alignas(4)glm::vec1 _Octaves = glm::vec1(12); //1 to 32
-	alignas(4) glm::vec1 _AmplitudeDecay = glm::vec1(0.45f); //.01 to 1
+	alignas(4) glm::vec1 _AmplitudeDecay = glm::vec1(0.439f); //.01 to 1
 	alignas(4)glm::vec1 _NormalStrength = glm::vec1(0.0f);
 	alignas(16) glm::vec4 _Offset = glm::vec4(0); //Horizontal scroll through the noise
-	alignas(4) glm::vec1 _Seed = glm::vec1(0.0f);
-	alignas(4)glm::vec1 _InitialAmplitude = glm::vec1(0.5); //0.01 to 2.0
-	alignas(4) glm::vec1 _Lacunarity = glm::vec1(2.0f); //.01 to 3
+	alignas(4) glm::vec1 _Seed = glm::vec1(135);
+	alignas(4)glm::vec1 _InitialAmplitude = glm::vec1(0.739); //0.01 to 2.0
+	alignas(4) glm::vec1 _Lacunarity = glm::vec1(1.991f); //.01 to 3
 	alignas(8) glm::vec2 _SlopeRange = glm::vec2(0.84, 0.98);
-	alignas(16) glm::vec4 _LowSlopeColor = glm::vec4(.3686274509803922, .3725490196078431, .0784313725490196, 1);
+	alignas(16) glm::vec4 _LowSlopeColor = glm::vec4(.45882352941, .46274509803, .43137254902, 1);
 	alignas(16) glm::vec4 _HighSlopeColor = glm::vec4(.1019607843137255, .0588235294117647, .0470588235294118, 1);
 	alignas(4) glm::vec1 _FrequencyVarianceLowerBound = glm::vec1(-0.085);
 	alignas(4) glm::vec1 _FrequencyVarianceUpperBound = glm::vec1(.115);
@@ -184,7 +169,7 @@ public:
 	}
 
 private:
-	glm::vec3 camPos = glm::vec3(0.0f, 100.0f, 100.0f);
+	glm::vec3 camPos = glm::vec3(0.0f, 100.0f, 150.0f);
 
 	GLFWwindow* window;
 	VkInstance instance;
@@ -233,7 +218,7 @@ private:
 
 	glm::vec2 previousMousePos = glm::vec2(0);
 	glm::vec2 mouseDelta = glm::vec2(0);
-	float modelRotationSpeed = 10.0f;
+	float modelRotationSpeed = 4.0f;
 
 	UniformBufferObject ubo{};
 
@@ -248,22 +233,9 @@ private:
 		//Hint to disable window resizing
 		//glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Terrain Generator", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-
-		/*
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		if (glfwRawMouseMotionSupported())
-		{
-			glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-		}
-		else
-		{
-			throw std::runtime_error("Raw mouse motion now supported");
-		}
-		*/
-		glfwSetCursorPosCallback(window, cursorPositionCallback);
 		glfwSetScrollCallback(window, scrollCallback);
 	}
 
@@ -271,18 +243,6 @@ private:
 	{
 		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
 		app->framebufferResized = true;
-	}
-
-	static void cursorPositionCallback(GLFWwindow* window, double xPos, double yPos)
-	{
-		/*
-		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
-		app->mouseDelta = glm::vec2(xPos, yPos) - app->previousMousePos;
-		app->previousMousePos = glm::vec2(xPos, yPos);
-
-		app->ubo._View = glm::rotate(app->ubo._View, glm::radians(1.0f), glm::vec3(app->mouseDelta.y, app->mouseDelta.x, 0.0f));
-		//std::cout << "X: " << app->ubo.view[0][0] << "\tY: " << app->mouseDelta.y << std::endl;
-		*/
 	}
 
 	static void scrollCallback(GLFWwindow* window, double xOffset, double yOffset)
@@ -1139,7 +1099,7 @@ private:
 		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 		//Render pass create info
-		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment , depthAttachment };
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1644,9 +1604,8 @@ private:
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-
 		createUI();
-
+		ImGui::End();
 		ImGui::Render();
 
 		ImDrawData* drawData = ImGui::GetDrawData();
@@ -1875,9 +1834,9 @@ private:
 		{
 			for (int j = 0; j < MESH_SIDE_LENGTH; j++)
 			{
-				xzPos = glm::vec2(i - midpoint, j - midpoint);
+				xzPos = glm::vec2(i - midpoint, j - midpoint) * MESH_SCALE;
 				//Vertex newVert = Vertex(glm::vec3(xzPos.x, 0, xzPos.y), glm::vec3(1.0f, 1.0f, 1.0f));
-				vertices.emplace_back(glm::vec3(xzPos.x * MESH_SCALE, 0.0f, xzPos.y * MESH_SCALE), glm::vec3(xzPos.x / MESH_SIDE_LENGTH, xzPos.y / MESH_SIDE_LENGTH, 0.0f));
+				vertices.emplace_back(glm::vec3(xzPos.x, 0.0f, xzPos.y), glm::vec3(xzPos.x / MESH_SIDE_LENGTH, xzPos.y / MESH_SIDE_LENGTH, 0.0f));
 
 				counter++;
 			}
@@ -1897,17 +1856,8 @@ private:
 				uint32_t v3 = v + MESH_SIDE_LENGTH + 1;
 
 				indices.insert(indices.end(), { v0, v1, v2, v1, v3, v2 });
-
-				//std::cout << "v0: " << v0 << "\tv1: " << v1 << std::endl;
-				//std::cout << "v2: " << v2 << "\tv3: " << v3 << std::endl;
 			}
 		}
-		/*
-		for (int i = 0; i < indices.size(); i++)
-		{
-			std::cout << indices[i] << "\n";
-		}
-		*/
 	}
 
 	void initImgui()
@@ -1946,6 +1896,7 @@ private:
 		//glm::vec4 color = glm::vec4(0);
 		if (ImGui::CollapsingHeader("Material Settings"))
 		{
+			ImGui::DragFloat3("Light Direction", glm::value_ptr(ubo._LightDirection));
 			ImGui::ColorEdit4("Ambient Light", glm::value_ptr(ubo._AmbientLight));
 			ImGui::ColorEdit4("High Slope Color", glm::value_ptr(ubo._HighSlopeColor));
 			ImGui::ColorEdit4("Low Slope Color", glm::value_ptr(ubo._LowSlopeColor));
@@ -1958,20 +1909,32 @@ private:
 
 		if (ImGui::CollapsingHeader("Mesh Settings"))
 		{
+			ImGui::DragFloat("Noise Seed", &ubo._Seed.x, 1.0f);
+
 			float offsetMin = -180.0f;
 			float offsetMax = 180.0f;
-			ImGui::DragScalar("Offset", ImGuiDataType_Float, &ubo._Offset.x, 1.0f, &offsetMin, &offsetMax);
+			ImGui::DragFloat3("Offset", glm::value_ptr(ubo._Offset), .1f);
 
 			float rotationMin = 0.0f;
 			float rotationMax = 90.0f;
 			ImGui::DragScalar("Rotation Speed", ImGuiDataType_Float, &modelRotationSpeed, 1.0f, &rotationMin, &rotationMax);
+		}
 
+		if (ImGui::CollapsingHeader("Octave Settings"))
+		{
 			float gradientRotationMin = -180.0f;
 			float gradientRotationMax = 180.0f;
 			ImGui::DragScalar("Gradient Rotation", ImGuiDataType_Float, &ubo._GradientRotation, 0.1f, &gradientRotationMin, &gradientRotationMax, (const char*)0, ImGuiSliderFlags_WrapAround);
+
+			ImGui::DragFloat("Octave Count", &ubo._Octaves.x, 1.0f, 1.0f, 32.0f);
+			ImGui::DragFloat("Lacunarity", &ubo._Lacunarity.x, 0.05f, 0.01, 3);
+			ImGui::DragFloat("Frequency Variance Lower Bound", &ubo._FrequencyVarianceLowerBound.x, 0.005f, -1.0f, 1.0f);
+			ImGui::DragFloat("Frequency Variance Upper Bound", &ubo._FrequencyVarianceUpperBound.x, 0.005f, -1.0f, 1.0f);
+			ImGui::DragFloat("Height Scale", &ubo._TerrainHeight.x, 0.5f, 1.0f, 300.0f);
+			ImGui::DragFloat("Amplitude Decay", &ubo._AmplitudeDecay.x, 0.05f, 0.0f, 1.0f);
+			ImGui::DragFloat("Initial Amplitude", &ubo._InitialAmplitude.x, .1f, .1f, 2.0f);
+			ImGui::DragFloat2("Angular Variance", glm::value_ptr(ubo._AngularVariance), 0.1f);
 		}
-		
-		ImGui::End();
 	}
 };
 
